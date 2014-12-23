@@ -1,3 +1,58 @@
+/***************************************************************************
+ *   Copyright (C) 2014 Daniel Nicoletti <dantti12@gmail.com>              *
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 2 of the License, or     *
+ *   (at your option) any later version.                                   *
+ *                                                                         *
+ *   This program is distributed in the hope that it will be useful,       *
+ *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
+ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
+ *   GNU General Public License for more details.                          *
+ *                                                                         *
+ *   You should have received a copy of the GNU General Public License     *
+ *   along with this program; see the file COPYING. If not, write to       *
+ *   the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,  *
+ *   Boston, MA 02110-1301, USA.                                           *
+ ***************************************************************************/
+
+// THIS Code is based on the ssh-agent.c code which has the following authors
+/*
+ * Author: Tatu Ylonen <ylo@cs.hut.fi>
+ * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
+ *                    All rights reserved
+ * The authentication agent program.
+ *
+ * As far as I am concerned, the code I have written for this software
+ * can be used freely for any purpose.  Any derived versions of this
+ * software must be clearly marked as such, and if the derived work is
+ * incompatible with the protocol description in the RFC file, it must be
+ * called by a name other than "ssh" or "Secure Shell".
+ *
+ * Copyright (c) 2000, 2001 Markus Friedl.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include "sshagent.h"
 
 #include <QLocalServer>
@@ -125,7 +180,7 @@ void SshAgent::readyRead()
         default:
             /* send a fail message for all other request types */
             QDataStream out(socket);
-            out << 1 << SSH_AGENT_FAILURE;
+            out << 1 << quint8(SSH_AGENT_FAILURE);
         }
         return;
     }
@@ -137,7 +192,56 @@ void SshAgent::readyRead()
     case SSH_AGENTC_UNLOCK:
         lockAgent(socket, in, false);
         break;
+#ifdef WITH_SSH1
+    /* ssh1 */
+    case SSH_AGENTC_RSA_CHALLENGE:
+        process_authentication_challenge1(e);
+        break;
+    case SSH_AGENTC_REQUEST_RSA_IDENTITIES:
+        process_request_identities(e, 1);
+        break;
+    case SSH_AGENTC_ADD_RSA_IDENTITY:
+    case SSH_AGENTC_ADD_RSA_ID_CONSTRAINED:
+        process_add_identity(e, 1);
+        break;
+    case SSH_AGENTC_REMOVE_RSA_IDENTITY:
+        process_remove_identity(e, 1);
+        break;
+    case SSH_AGENTC_REMOVE_ALL_RSA_IDENTITIES:
+        process_remove_all_identities(e, 1);
+        break;
+#endif
+    /* ssh2 */
+    case SSH2_AGENTC_SIGN_REQUEST:
+//        process_sign_request2(e);
+        break;
+    case SSH2_AGENTC_REQUEST_IDENTITIES:
+//        process_request_identities(e, 2);
+        break;
+    case SSH2_AGENTC_ADD_IDENTITY:
+    case SSH2_AGENTC_ADD_ID_CONSTRAINED:
+//        process_add_identity(e, 2);
+        break;
+    case SSH2_AGENTC_REMOVE_IDENTITY:
+//        process_remove_identity(e, 2);
+        break;
+    case SSH2_AGENTC_REMOVE_ALL_IDENTITIES:
+//        process_remove_all_identities(e, 2);
+        break;
+#ifdef ENABLE_PKCS11
+    case SSH_AGENTC_ADD_SMARTCARD_KEY:
+    case SSH_AGENTC_ADD_SMARTCARD_KEY_CONSTRAINED:
+        process_add_smartcard_key(e);
+        break;
+    case SSH_AGENTC_REMOVE_SMARTCARD_KEY:
+        process_remove_smartcard_key(e);
+        break;
+#endif /* ENABLE_PKCS11 */
     default:
+        /* Unknown message.  Respond with failure. */
+        qWarning("Unknown message %d", type);
+        QDataStream out(socket);
+        out << 1 << quint8(SSH_AGENT_FAILURE);
         break;
     }
 
@@ -174,8 +278,22 @@ void SshAgent::lockAgent(QLocalSocket *socket, QDataStream &in, bool lock)
 
     qDebug() << "lockAgent success" << success << m_locked;
     QDataStream out(socket);
-    char ret = success ? SSH_AGENT_SUCCESS : SSH_AGENT_FAILURE;
-    out << 1;
-    out << ret;
+    out << 1 << quint8(success ? SSH_AGENT_SUCCESS : SSH_AGENT_FAILURE);
+}
+
+void SshAgent::addIdentity(QLocalSocket *socket, QDataStream &in, int version)
+{
+    switch (version) {
+#ifdef WITH_SSH1
+    case 1:
+
+        break;
+#endif /* WITH_SSH1 */
+    case 2:
+
+    }
+
+    QDataStream out(socket);
+    out << 1 << quint8(SSH_AGENT_FAILURE);
 }
 
